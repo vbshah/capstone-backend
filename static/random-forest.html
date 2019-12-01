@@ -1,0 +1,46 @@
+<div>
+  <h3>
+    A&nbsp;random&nbsp;forest&nbsp;is&nbsp;a&nbsp;meta&nbsp;estimator&nbsp;that&nbsp;fits&nbsp;a&nbsp;number&nbsp;of&nbsp;decision&nbsp;tree&nbsp;classifiers&nbsp;on&nbsp;various&nbsp;sub-samples&nbsp;of&nbsp;the&nbsp;dataset&nbsp;and&nbsp;uses&nbsp;averaging&nbsp;to&nbsp;improve&nbsp;the&nbsp;predictive&nbsp;accuracy&nbsp;and&nbsp;control&nbsp;over-fitting.&nbsp;The&nbsp;sub-sample&nbsp;size&nbsp;is&nbsp;always&nbsp;the&nbsp;same&nbsp;as&nbsp;the&nbsp;original&nbsp;input&nbsp;sample&nbsp;size&nbsp;but&nbsp;the&nbsp;samples&nbsp;are&nbsp;drawn&nbsp;with
+    a replacement&nbsp;if&nbsp;bootstrap=True&nbsp;(default).
+  </h3>
+  <p>&nbsp;</p>
+  <h4>Number of parameters:</h4>
+  <ul>
+    <li>
+      <strong>n_estimators</strong
+      ><span class="classifier-delimiter">:</span>&nbsp;<span class="classifier"
+        >integer, optional (default=10)</span
+      >
+      <p class="first">The number of trees in the forest.</p>
+    </li>
+    <li>
+      <strong>max_depth</strong
+      ><span class="classifier-delimiter">:</span>&nbsp;<span class="classifier"
+        >integer or None, optional (default=None)</span
+      >
+      <p class="first last">
+        The maximum depth of the tree. If None, then nodes are expanded until
+        all leaves are pure or until all leaves contain less than
+        min_samples_split samples.
+      </p>
+    </li>
+    <li>
+      <strong>criterion</strong
+      ><span class="classifier-delimiter">:</span>&nbsp;<span class="classifier"
+        >string, optional (default=&rdquo;gini&rdquo;)</span
+      >
+      <p class="first last">
+        The function to measure the quality of a split. Supported criteria are
+        &ldquo;gini&rdquo; for the Gini impurity and &ldquo;entropy&rdquo; for
+        the information gain. Note: this parameter is tree-specific
+      </p>
+    </li>
+  </ul>
+  <p>
+    &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<img
+      src="https://media.springernature.com/original/springer-static/image/art%3A10.1007%2Fs13042-018-00916-z/MediaObjects/13042_2018_916_Fig3_HTML.png"
+      width="455"
+      height="322"
+    />
+  </p>
+</div>
