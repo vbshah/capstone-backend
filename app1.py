@@ -894,10 +894,6 @@ def linear_regression():
         'mse': mse
     }), 200
 
-
-
-
-
 @app.route('/codebox', methods=['GET', 'POST'])
 def codebox():
     if 'code' not in request.form:
@@ -905,14 +901,15 @@ def codebox():
 
     code = request.form['code']
     print('incoming code', code)
-    temp_filename = 'static/code-file-' + str(uuid.uuid1()) + '.py'
+    temp_filename = app.config['UPLOAD_FOLDER'] + "\\" + str(uuid.uuid1()) + '.py'
     print('temp filename', temp_filename)
     with open(temp_filename, 'w') as file:
         file.write(code)
-    output = subprocess.check_output('python ' + temp_filename, shell=True)
+    output = subprocess.check_output('python ' + temp_filename, shell=True, cwd=app.config['UPLOAD_FOLDER'])
     print('output', output)
     os.remove(temp_filename)
     return json.dumps({'output': output.decode('utf-8')}), 200
+
 
 @app.route('/get-code', methods=['GET', 'POST'])
 def get_code():
