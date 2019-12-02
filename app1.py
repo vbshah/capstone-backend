@@ -7,11 +7,13 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn.model_selection import cross_val_score
+from sklearn.cluster import AgglomerativeClustering
 import math
 from scipy import stats
 import numpy as np
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
+import scipy.cluster.hierarchy as shc
 from helper.upload import allowed_file, get_file, calculate_meta
 from helper.general import add_code
 from helper.visualization import generate_histogram, generate_boxplot, generate_atag, generate_correlation, save_plot
@@ -893,6 +895,47 @@ def linear_regression():
         'r2s': r2s,
         'mse': mse
     }), 200
+
+
+@app.route('/hierarchical', methods=['GET', 'POST'])
+def hierarchical():
+    if request.method == 'POST':
+        print('inside hierarchical clustering')
+        features = request.form['columns'].split(',')
+        print('incoming features', features, 'type', type(features))
+        file_key = request.form['fileKey']
+        data = get_file(file_key, app.config['UPLOAD_FOLDER'])
+        data = data[(data.values != '?').all(axis=1)]
+        data.dropna(inplace=True)
+        data = data[features]
+        if 'column1' not in request.form or 'column2' not in request.form:
+            column1 = features[0]
+            column2 = features[1]
+        else:
+            column1 = request.form['column1']
+            column2 = request.form['column2']
+        if 'n_clusters' not in request.form:    # did not came with request, set default to 2
+            n_clusters = 2
+        else:   # came in request, convert it into integer
+            n_clusters = int(request.form['n_clusters'])
+
+        for feature in features:    # convert features if they are not already
+            if str(data[feature].dtype) == 'object':
+                data[feature] = pd.Categorical(data[feature]).codes
+
+        cluster = AgglomerativeClustering(n_clusters=n_clusters, affinity='euclidean', linkage='ward')
+        cluster.fit_predict(data)
+        plt.figure()
+        plt.scatter(data[column1], data[column2], c=cluster.labels_)
+        plt.tight_layout()
+        plot_name = save_plot(plt, app.config['VIZ_FOLDER'], 'clustering')
+        # below code for building dendogram
+
+        plt.figure()
+        dend = shc.dendrogram(shc.linkage(data, method='ward'))
+        plt.tight_layout()
+        dend_plot = save_plot(plt, app.config['VIZ_FOLDER'], 'dendrogram')
+        return json.dumps({'cluster': plot_name, 'dendrogram': dend_plot}), 200
 
 @app.route('/codebox', methods=['GET', 'POST'])
 def codebox():
