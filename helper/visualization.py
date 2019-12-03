@@ -1,6 +1,11 @@
 import uuid
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import LabelEncoder
+import pandas as pd
+import numpy as np
+
 
 
 def generate_histogram(column, column_name, path, dtype):
@@ -89,4 +94,37 @@ def save_plot(plot, path, plot_type=''):
 
 def generate_atag(url):
     return "<a href='"+url+'"/>'
+
+
+def apply_pca(data, columns, path):
+    print('columns for PCA', columns)
+    data = data[(data.values != '?').all(axis=1)]
+    data.dropna(inplace=True)
+    data = data[columns]
+    numeric_columns = data.select_dtypes(include=[np.number]).columns.tolist()
+    # convert columns to numeric values if it's possible
+    for col in data.columns:
+        data[col] = data[col].astype(float, errors='ignore')
+
+    # convert non-numeric columns
+    for col in data.columns:
+        if col not in numeric_columns:
+            le = LabelEncoder()
+            le.fit(data[col])
+            data[col] = le.transform(data[col])
+            print('col', col, 'encoded classes', data[col].unique())
+
+    # convert columns to numeric values if it's possible
+    for col in data.columns:
+        data[col] = data[col].astype(float, errors='ignore')
+
+    pca = PCA().fit(data)
+    plt.figure()
+    # plt.hold(False)
+    plt.plot(np.cumsum(pca.explained_variance_ratio_))
+    plt.xlabel('number of components')
+    plt.ylabel('cumulative explained variance')
+    plt.tight_layout()
+    pca_plot = save_plot(plt, path, '_pca_plot_')
+    return pca_plot
 

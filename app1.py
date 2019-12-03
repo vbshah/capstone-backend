@@ -7,7 +7,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn.model_selection import cross_val_score
+from sklearn.svm import SVC
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.preprocessing import LabelEncoder
+from sklearn.decomposition import PCA
 import math
 from scipy import stats
 import numpy as np
@@ -16,7 +19,7 @@ import matplotlib.pyplot as plt
 import scipy.cluster.hierarchy as shc
 from helper.upload import allowed_file, get_file, calculate_meta
 from helper.general import add_code
-from helper.visualization import generate_histogram, generate_boxplot, generate_atag, generate_correlation, save_plot
+from helper.visualization import generate_histogram, generate_boxplot, generate_atag, generate_correlation, save_plot, apply_pca
 from helper.mining import generate_report, generate_rmse_table
 from helper.scaler import apply_std_scaling
 import uuid
@@ -544,6 +547,9 @@ def visualization():
         add_code(file_key, file_collection, code)
         print('box plots', plots)
         return json.dumps({'images': plots}), 200
+    elif vis_type == 'Apply PCA':
+        pca_plot = apply_pca(data, columns, app.config['VIZ_FOLDER'])
+        return json.dumps({'images': [pca_plot]}), 200
 
 
 
@@ -918,8 +924,8 @@ def hierarchical():
             n_clusters = 2
         else:   # came in request, convert it into integer
             n_clusters = int(request.form['n_clusters'])
-
-        for feature in features:    # convert features if they are not already
+        # convert features if they are not already
+        for feature in features:
             if str(data[feature].dtype) == 'object':
                 data[feature] = pd.Categorical(data[feature]).codes
 
@@ -936,6 +942,38 @@ def hierarchical():
         plt.tight_layout()
         dend_plot = save_plot(plt, app.config['VIZ_FOLDER'], 'dendrogram')
         return json.dumps({'cluster': plot_name, 'dendrogram': dend_plot}), 200
+
+
+@app.route('/svm', methods=['POST'])
+def svm():
+    feature_file = None
+    roc_file = None
+    conf_file = None
+    accuracy = None
+    report_dict = None
+    imgErr = None
+    code = "# Code to generate random forest classifier and its report\n"
+    if any([i not in request.form for i in ['fileKey', 'valuation', 'columns', '', 'valuationType']]):
+        print('value not found')
+        return 'Please send missing values', 500
+    print('valuationType', request.form['valuationType'])
+    valuation = request.form['valuation']
+    file_key = request.form['fileKey']
+    columns = request.form['columns'].split(',')
+    print('selected columns for random forest', columns)
+    code += "columns = " + str(columns) + "\n"
+    n_estimator = request.form['n_estimator']
+    max_depth = request.form['max_depth']
+    valuation_type = request.form['valuationType']
+    print('valuation', valuation, type(valuation))
+
+    if len(valuation) == 0:
+        valuation = 0.3
+    code += "valuation = " + str(valuation) + "\n"
+
+    if valuation_type is None:
+        valuation_type = 'TTS'
+
 
 @app.route('/codebox', methods=['GET', 'POST'])
 def codebox():
