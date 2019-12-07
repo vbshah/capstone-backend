@@ -20,7 +20,7 @@ import scipy.cluster.hierarchy as shc
 from helper.upload import allowed_file, get_file, calculate_meta
 from helper.general import add_code
 from helper.visualization import generate_histogram, generate_boxplot, generate_atag, generate_correlation, save_plot, apply_pca
-from helper.mining import generate_report, generate_rmse_table
+from helper.mining import generate_report, generate_rmse_table, save_model
 from helper.scaler import apply_std_scaling
 import uuid
 import subprocess
@@ -33,6 +33,7 @@ import json
 import datetime
 from io import StringIO
 import numpy as np
+import joblib
 
 
 def json_serializer(key, value):
@@ -584,6 +585,7 @@ def random_forest():
     accuracy = None
     report_dict = None
     imgErr = None
+    model_file = None
     code = "# Code to generate random forest classifier and its report\n"
     if any([i not in request.form for i in ['fileKey', 'valuation', 'columns', 'n_estimator', 'max_depth', 'valuationType']]):
         print('value not found')
@@ -722,13 +724,13 @@ def random_forest():
                xticklabels=classes, yticklabels=classes,
                title="Confusion Matrix",
                ylabel='True label',
-               xlabel='Predicted label')\n        
+               xlabel='Predicted label')\n
         """
         # Rotate the tick labels and set their alignment.
         plt.setp(ax.get_xticklabels(), ha="right", rotation_mode="anchor")
         plt.tight_layout()
         conf_file = save_plot(plt, app.config['VIZ_FOLDER'], 'confusion_matrix')
-
+        model_file, _ = save_model(clf, columns, 'random_forest', app.config['UPLOAD_FOLDER'])
     else:
         cv_fold = int(request.form['valuation'])
         code += "cv_fold = int(request.form['valuation'])\n"
@@ -772,7 +774,6 @@ def random_forest():
         plt.tight_layout()
         imgErr = save_plot(plt, app.config['VIZ_FOLDER'], 'random_error')
 
-
     output = dict()
     output['imgFeat'] = feature_file
     output['imgROC'] = roc_file
@@ -783,6 +784,7 @@ def random_forest():
     output['mean'] = rmse_mean
     output['std'] = rmse_std
     output['imgErr'] = imgErr
+    output['model_file'] = model_file
 
     print('returning', output)
     # adding code
@@ -803,7 +805,7 @@ def linear_regression():
     linear_fit_file = None
     mse = None
     r2s = None
-
+    model_file = None
     valuation = request.form['valuation']
     file_key = request.form['fileKey']
     columns = request.form['columns'].split(',')
@@ -828,11 +830,14 @@ def linear_regression():
     code += "data = data[columns + [target]]     # only selecting necessary columns\n"
     # before putting data into model, need to convert it into labels
     regression = LinearRegression()
-
+    encoder_object = dict()     # this will store encoder for each column which is object
     for feature in columns:
         print('converting column', feature)
         if str(data[feature].dtype) == 'object':
-            data[feature] = pd.Categorical(data[feature]).codes
+            encoder = LabelEncoder()    # need encoder to convert object to numeric
+            encoder.fit(data[feature])
+            data[feature] = encoder.transform(data[feature])
+            encoder_object[feature] = encoder
     if valuation_type == 'TTS':
         x_train, x_test, y_train, y_test = train_test_split(data.drop(target, 1), data[target], test_size=valuation,
                                                             random_state=42)
@@ -876,6 +881,7 @@ def linear_regression():
 
         plt.tight_layout()
         linear_fit_file = save_plot(plt, app.config['VIZ_FOLDER'], '_linear_fit_')
+        model_file, _ = save_model(regression, columns, 'linear_regression', app.config['UPLOAD_FOLDER'], encoder_object)
     else:
         valuation = int(valuation)
         scores = cross_val_score(regression, data.drop([target], axis=1), data[target], scoring="neg_mean_squared_error",
@@ -899,7 +905,8 @@ def linear_regression():
         'imgFeat': feature_file,
         'linearFit': linear_fit_file,
         'r2s': r2s,
-        'mse': mse
+        'mse': mse,
+        'model_file': model_file
     }), 200
 
 
@@ -956,6 +963,7 @@ def svm():
     if any([i not in request.form for i in ['fileKey', 'valuation', 'columns', '', 'valuationType']]):
         print('value not found')
         return 'Please send missing values', 500
+    code = "\n"
     print('valuationType', request.form['valuationType'])
     valuation = request.form['valuation']
     file_key = request.form['fileKey']
@@ -966,6 +974,16 @@ def svm():
     max_depth = request.form['max_depth']
     valuation_type = request.form['valuationType']
     print('valuation', valuation, type(valuation))
+    rmse_score_dict = dict()
+    rmse_mean = None
+    rmse_std = None
+    imgErr = None
+    data = get_file(file_key, app.config['UPLOAD_FOLDER'])
+    data = data[(data.values != '?').all(axis=1)]
+    data.dropna(inplace=True)
+    target = request.form['target_col']
+    code += "target = " + str(target) + "\n"
+    data = data[columns + [target]]     # only selecting necessary columns
 
     if len(valuation) == 0:
         valuation = 0.3
@@ -973,7 +991,72 @@ def svm():
 
     if valuation_type is None:
         valuation_type = 'TTS'
+    if 'kernel-value' not in request.form:
+        kernel_value = 'linear'
+    else:
+        kernel_value = request.form['kerna-value']
+    clf = SVC(gamma='auto', kernel=kernel_value, probability=True)
+    fig, ax = plt.subplots()
+    if valuation_type == 'TTS':
+        valuation = float('valuation')
+        x_train, x_test, y_train, y_test = train_test_split(data.drop('Class', 1), data['Class'], random_state=98)
+        clf.fit(x_train, y_train)
+        y_pred = clf.predict(x_test)
+        cols = x_train.columns
+        coef = clf.coef_
+        col_names = list(features)
+        importance = list(coef[0])
+        coefs_df = pd.DataFrame(importance, col_names)
+        coefs_df.columns = ["coef"]
+        coefs_df["abs"] = coefs_df.coef.apply(np.abs)
+        coefs_df = coefs_df.sort_values(by="abs", ascending=False).drop(["abs"], axis=1)
 
+        plt.figure()
+        coefs_df.coef.plot(kind='bar')
+        plt.title("Feature importance ranging from highest to lowest")
+        plt.grid(True, axis='y')
+        plt.hlines(y=0, xmin=0, xmax=len(coefs_df), linestyles='dashed')
+        plt.tight_layout()
+        preds = clf.predict_proba(x_test)[:, 1]
+        y_test_temp = pd.Categorical(y_test).codes
+        fpr, tpr, thresholds = metrics.roc_curve(y_test_temp, preds)
+        roc_auc = metrics.auc(fpr, tpr)
+        plt.figure()
+        plt.plot(fpr, tpr, 'b', label='AUC = %0.2f' % roc_auc)
+        plt.title('Receiver Operating Characteristic')
+        plt.legend(loc='lower right')
+        plt.ylabel('True Positive Rate')
+        plt.xlabel('False Positive Rate')
+
+        plt.tight_layout()
+
+        accuracy = metrics.accuracy_score(y_test, y_pred)
+        print('accuracy', accuracy)
+
+        report_dict = metrics.classification_report(y_test, y_pred, output_dict=True)
+        print(generate_report(report_dict))
+
+        cm = metrics.confusion_matrix(y_test, y_pred)
+        classes = data[label].unique()
+        classes = list(classes)
+        length = len(classes)
+        classes = []
+        for i in range(length):
+            classes.append(i)
+        fig, ax = plt.subplots()
+        im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+        ax.figure.colorbar(im, ax=ax)
+        # We want to show all ticks...
+        ax.set(xticks=np.arange(cm.shape[1]),
+               yticks=np.arange(cm.shape[0]),
+               xticklabels=classes, yticklabels=classes,
+               title="Confusion Matrix",
+               ylabel='True label',
+               xlabel='Predicted label')
+
+        # Rotate the tick labels and set their alignment.
+        plt.setp(ax.get_xticklabels(), ha="right", rotation_mode="anchor")
+        plt.tight_layout()
 
 @app.route('/codebox', methods=['GET', 'POST'])
 def codebox():
@@ -1008,6 +1091,33 @@ def get_code():
     print('generated code', code)
     return json.dumps({'code': code}), 200
 
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    if 'model_key' not in request.form:  # first, check we got the key or not
+        return json.dumps({'message': 'please send model key'}), 500
+    model_key = request.form['model_key']
+    # load required features for model, it will be list, check filename's format in helper.mining.save_mode
+    meta_object = joblib.load(os.path.join(app.config['UPLOAD_FOLDER'], model_key+'_meta.sav'))
+    features = meta_object['features']
+    if any([feature not in request.form for feature in features]):
+        return json.dumps({'message': 'Please send all the feature values'}), 500
+    # load model only after features are checked
+    model = joblib.load(os.path.join(app.config['UPLOAD_FOLDER'], model_key))
+    test_data = []
+    print('meta', meta_object)
+    for feature in features:
+        """
+        convert object value to numeric if encoder is available in meta_object.
+        Because it must have been converted during prediction
+        """
+        if feature in meta_object['encoder_object']:
+            test_data.append(meta_object['encoder_object'][feature].transform([request.form[feature]])[0])
+        else:
+            test_data.append(float(request.form[feature]))
+
+    prediction = str(model.predict([test_data])[0])    # convert output to string, just to be safe
+    return json.dumps({'output': prediction}), 200
 
 
 @app.route('/posts', methods=['GET', 'POST'])
